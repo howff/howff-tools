@@ -1,0 +1,245 @@
+#!/bin/bash
+# Use gnuplot to create a PNG on stdout
+# Usage: use -X and -Y to set width and height (scaling factors)
+# Use -x if you have the x axis in the file (otherwise a default x axis is used)
+# Use -y to add a y axis graph (give the column number)
+# You can add multiple graph using multiple parameters -y column
+# Using -t sets the same title for each graph, given before each -y option.
+# Default plots with lines, use -c to plot crosses instead (no interpolation)
+# 2.18 arb Thu Mar 29 12:45:49 BST 2018 - Added -D for debug. Fixed x axis
+#      when -d used first because using param cannot be an expr for dates.
+#      Script is /bin/bash not /bin/sh
+# 2.17 arb Thu Oct  6 14:50:36 BST 2016 - Increase default size. Fix x expr.
+# 2.16 arb Wed Oct  5 18:08:16 BST 2016 - Added -M margins for xlogview autoerr
+# 2.15 arb Wed May 11 15:18:51 BST 2016 - Added -s separator option for CSV,
+#      added brackets and dollar signs around using params so expression can be
+#      used eg. 2*1.4 to scale all values in column 2 by 1.4
+# 2.14 arb Fri May 30 13:22:33 BST 2014 - Right-hand Y axis is labelled.
+# 2.13 arb Fri May 16 10:05:46 BST 2014 - Added -b and -l for bars/lines.
+# 2.12 arb Wed Feb  5 16:38:47 GMT 2014 - Fixed size for gnuplot 4.2 or later.
+# 2.11 arb Tue Nov 23 18:33:10 GMT 2010 - Added -G filter option.
+# 2.10 arb Fri May  8 00:15:10 BST 2009 - Added -T for graph title.
+# 2.09 arb Tue Apr 29 15:49:33 BST 2008 - Ignore comment lines on input.
+# 2.08 arb Wed Mar 19 11:59:29 GMT 2008 - Fixed for cross-platform escapes
+# 2.07 arb Fri Mar 14 16:05:22 GMT 2008 - the -V option now applies to the y
+#      axis on the right if -r was used last, so -V can be used on both y axes.
+# 2.06 arb Thu Feb 28 18:18:51 GMT 2008 - allow -r like -y but on right y axis.
+#      Added k option to position the key "below". Renumbered 2.03 onwards.
+#      Exit code is gnuplot exit code.
+# 2.05 arb Fri Nov 17 17:24:58 GMT 2006 - allow multiple independent plots
+#      using -x -y for each i.e. not all using the same x axis.
+# 2.04 arb Fri Jan 13 10:58:00 GMT 2006 - added option for gridlines
+# 2.03 arb Tue Jan 10 20:00:56 GMT 2006 - added option of date for x axis
+# 2.02 arb Wed Oct 26 12:48:51 BST 2005 - added help option
+# 2.01 arb Thu Apr 28 01:12:57 BST 2005 - added xrange,yrange option -H,-V
+# 2.00 arb Wed Apr 27 17:13:44 BST 2005 - rewritten so -t can be used for each y
+
+dat=/tmp/pngplot.data.$$
+datcopy=$dat
+cmd=/tmp/pngplot.cmd.$$
+dateformat=""
+filter=".*"
+gridlines="0"
+separator=""
+polarcoords=""
+xwidth=960  # was 640
+yheight=720 # was 480
+xscale=1
+yscale=1
+xrange="[*:*]"
+yrange="[*:*]"
+x2range="[*:*]"
+y2range="[*:*]"
+xaxis=""
+yaxis=""
+title=""
+desc=""
+key=""
+columns=0
+lines="with lines"
+fontsize=10
+debug=0
+options="bclg:d:G:M:x:y:r:p:X:Y:H:V:s:t:T:k:D"
+
+usage()
+{
+	echo "usage: `basename $0` [-b|-c] [-g N] [-d dateformat] [-X xscale] [-Y yscale] [-H x0:x1] [-V y0:y1] [-x xaxis_col] [-s sep] [-t title] -y yaxis_col [-y yaxis_col...]" >&2
+	echo "-b	plot bars (default is lines)" >&2
+	echo "-c	plot crosses (default is lines)" >&2
+	echo "-l	plot lines (default, use for multiple different styles)" >&2
+	echo "-g	gridlines with N minor lines (use 0 for major only)" >&2
+	echo "-X	x axis scale (e.g. use 2 for double width)" >&2
+	echo "-Y	y axis scale" >&2
+	echo "-H	horizontal axis range, eg. -30:60 for -30 to +60" >&2
+	echo "-V	vertical axis range" >&2
+	echo "-x	x axis column 1..n (column in input to use as x axis)" >&2
+	echo "	Note: without -x option (or 0) default x axis is line number" >&2
+	echo "-y	y axis column (give multiple times to plot multiple columns)" >&2
+	echo "-r	y axis column (but on the right instead of the left)" >&2
+	echo "	An expression can be used eg. 2*1.4 scales all values in column 2 by 1.4" >&2
+	echo "-s	separator (eg. ',' for CSV, default whitespace)" >&2
+	echo "-t	title for line (may be given BEFORE each -y option)" >&2
+	echo "-T	title for whole graph" >&2
+	echo "-k	key position (typically below, default right top)" >&2
+	echo "-d	x axis column is a date in the specified format:" >&2
+	echo "Use %Y %m %d %H %M %S (date and time), %b or %B (eg. Apr or April), %a (day)," >&2
+	echo "%j for julian day, or %s for seconds since 1970 (see strptime manual)" >&2
+	echo "	Note: -d must be given before -x" >&2
+	echo "-G	filter (regular expression for grep)" >&2
+	echo "-M	margins left,right,top,bottom (eg. 4,10,2,3)" >&2
+	exit 1
+}
+
+if [ "$1" = "-h" -o "$1" = "--help" -o "$1" = "-?" ]; then
+	usage
+fi
+if [ 0$debug -gt 0 ]; then echo "$@" >&2; fi
+
+# Read all arguments but don't do anything yet
+while getopts "$options" c; do
+	case $c in
+		b) lines="with boxes fillstyle solid";;
+		c) lines="";;
+		l) lines="with lines";;
+		g) gridlines="$OPTARG";;
+		d) dateformat="$OPTARG";;
+		G) filter="$OPTARG";;
+		M) margins="$OPTARG";;
+		x) xaxis=$OPTARG;;
+		y) yaxis=$OPTARG; columns=`expr $columns + 1`; prevy="y";;
+		p) polarcoords=$OPTARG;;
+		r) yaxis=$OPTARG; columns=`expr $columns + 1`; prevy="r";;
+		s) separator="$OPTARG";;
+		t) title="$OPTARG";;
+		T) desc="$OPTARG";;
+		k) key="$OPTARG";;
+		X) xscale=$OPTARG;;
+		Y) yscale=$OPTARG;;
+		H) xrange="[$OPTARG]";;
+		V) if [ "$prevy" = "r" ]; then y2range="[$OPTARG]"; else yrange="[$OPTARG]"; fi;;
+		D) debug=1;;
+		\?) usage;;
+	esac
+done
+
+# Calculate the image dimensions
+xwidth=`expr $xwidth '*' $xscale`
+yheight=`expr $yheight '*' $yscale`
+
+# Copy standard input (except comment lines) to a temporary file
+grep -v '^[ 	]*#' | grep "$filter" > $dat
+
+# Create a GNUPLOT command file to create a PNG image
+# If you want PostScript output use set terminal postscript eps color
+# Can also output svg (takes size params) and many other formats.
+echo "set term png enhanced size $xwidth,$yheight font ',$fontsize';" > $cmd
+#echo "set term postscript eps color;" > $cmd
+
+# if no Y axis specified then use first column in file
+if [ "$yaxis" = "" ]; then yaxis=1; columns=1; fi
+
+# Write command file header
+#echo "set size $xscale,$yscale;" >> $cmd               # image dimensions
+echo "set xrange  $xrange;"  >> $cmd                   # x axis range
+echo "set yrange  $yrange;"  >> $cmd                   # y axis range
+echo "set x2range $x2range;" >> $cmd                   # x axis range (top)
+echo "set y2range $y2range;" >> $cmd                   # y axis range (right)
+echo "set y2tics border;"    >> $cmd                   # -r option y axes is labelled
+echo "set tics font ',$fontsize'"   >> $cmd
+if [ "$polarcoords" != "" ]; then
+	echo 'set polar;'           >> $cmd
+	echo 'set trange [0:2*pi];' >> $cmd
+fi
+if [ "$desc" != "" ]; then
+	echo 'set title "'$desc'";' >> $cmd
+fi
+if [ "$gridlines" != "" ]; then
+	if [ $gridlines -gt 0 ]; then
+		echo "set mxtics $gridlines;" >> $cmd          # x axis minor tics
+		echo "set mytics $gridlines;" >> $cmd          # y axis minor tics
+	fi
+	echo "set grid xtics ytics mxtics mytics;" >> $cmd # to show gridlines
+fi
+if [ "$dateformat" != "" ]; then
+	echo "set xdata time;" >> $cmd                     # x axis is by date
+	#echo "set xmtics;" >> $cmd                        # monthly tickmarks?
+	echo "set timefmt "'"'$dateformat'"'";" >> $cmd          # input date format
+	printf 'set format x "%%d %%b\\n%%H:%%M";\n' >> $cmd # x axis labels (date/time)
+fi
+if [ "$separator" != "" ]; then
+	echo "set datafile separator \",\";" >> $cmd
+fi
+if [ "$key" != "" ]; then
+	# XXX should also append font $fontsize to this command
+	echo "set key $key;" >> $cmd                       # key position etc
+fi
+
+# Margins given as comma-separated string for left,right,top,bottom
+# in units of the width/height of one average character.
+if [ "$margins" != "" ]; then
+	lmargin=`echo $margins | awk -F, '{print$1}'`
+	rmargin=`echo $margins | awk -F, '{print$2}'`
+	tmargin=`echo $margins | awk -F, '{print$3}'`
+	bmargin=`echo $margins | awk -F, '{print$4}'`
+	printf "set lmargin %d;\n" $lmargin >> $cmd
+	printf "set rmargin %d;\n" $rmargin >> $cmd
+	printf "set tmargin %d;\n" $tmargin >> $cmd
+	printf "set bmargin %d;\n" $bmargin >> $cmd
+fi
+
+echo "plot \\" >> $cmd
+
+# The axis may be null in which case we leave it alone
+# otherwise we prepend it with a dollar sign meaning column number
+# and wrap in brackets so expression can be evaluated.
+if [ "$xaxis" != "" ]; then
+	# WAS xaxis="(\$${xaxis})" but that uses ($1) which fails if -d used.
+	if [ "$dateformat" == "" ]; then
+		xaxis="(\$${xaxis})"
+	else
+		xaxis="${xaxis}"
+	fi
+fi
+if [ "$yaxis" != "" ]; then
+	yaxis="(\$${yaxis})"
+fi
+
+# If only one column (either specified or default) then do it right now
+if [ $columns -eq 1 ]; then
+	echo "'$dat' using ${xaxis}:${yaxis} title '$title' $lines \\" >> $cmd
+else
+# For each column argument output a command line
+	count=0
+	OPTIND=1
+	while getopts "$options" c; do
+		case $c in
+			b) lines="with boxes fillstyle solid";;
+			c) lines="";;
+			l) lines="with lines";;
+			x) if [ "$dateformat" == "" ]; then
+					xaxis="(\$${OPTARG})"
+				else
+					xaxis="${OPTARG}"
+				fi ;;
+			y|r) yaxis="(\$${OPTARG})";
+				if [ $c = "r" ]; then axes="x1y2"; else axes="x1y1"; fi
+				echo "'$dat' using ${xaxis}:${yaxis} axes $axes title '$title' $lines \\" >> $cmd
+				count=`expr $count + 1`
+				if [ $count -lt $columns ]; then echo ", \\" >> $cmd; fi
+				dat="" # no need for filename after first use
+				;;
+			t) title="$OPTARG";;
+		esac
+	done
+fi
+
+# Output command trailer and execute in in gnuplot
+echo ";" >> $cmd
+if [ 0$debug -gt 0 ]; then cat $cmd >&2; fi
+gnuplot < $cmd
+rc=$?
+
+# Remove temporary files
+rm -f $datcopy $cmd >&2
+
+exit $rc
