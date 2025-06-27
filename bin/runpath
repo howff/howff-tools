@@ -1,0 +1,25 @@
+#!/bin/sh
+# 2.00 arb Thu Oct 28 16:16:24 BST 2010 - shell script
+# 1.00 arb                              - program
+# Extract the runpath ($RPATH) from the dynamic section of an ELF file
+# to determine the built-in $LD_LIBRARY_PATH
+os=`uname -s`
+# Luckily both elfdump and readelf use the -d option for the dynamic section
+# However readelf may need the -W option to show the full output??
+if [ "$os" = "Linux" ]; then
+	prog=readelf
+elif [ "$os" = "SunOS" ]; then
+	prog=elfdump
+else
+	echo "runpath: unknown architecture $os - do not know whether to use elfdump or readelf" >&2
+	exit 1
+fi
+for i do
+	printf "$i : "
+	r=`$prog -d "$i" | grep RPATH`
+	if [ "$r" = "" ]; then
+		printf "\n"
+	else
+		echo "$r"
+	fi
+done

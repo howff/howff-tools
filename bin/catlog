@@ -1,0 +1,66 @@
+#!/usr/bin/perl
+
+# usage: catlog *
+# rearranges the list of files provided by the shell wildcard expansion
+# into the opposite order, as most backup logs go 1,2,3 as they get older,
+# and uncompresses any which are compressed (.Z, .gz or .bz2).
+# Handles the ones named .log by always putting them at the end.
+# Only makes sense when all log files are from the same source,
+# so catlog history.* rather than catlog *
+
+
+# internal comparison function.
+# simply uses ascii sort.
+# for more complex names could find numeric part and sort on that.
+sub sort_log_name_by_number
+{
+	# if the name ends in ".log" then ensure it sorts last
+	if ($a =~ /\.log$/) { return 1; }
+	if ($b =~ /\.log$/) { return -1; }
+	# compare in reverse order
+	$b cmp $a;
+}
+
+# sort all of the command-line parameters (no options are expected)
+@sorted = sort sort_log_name_by_number @ARGV;
+
+# flag is set if any compressed filenames are detected
+$someZ = 0;
+
+# check for compressed files
+foreach $log (@sorted)
+{
+	$someZ=1 if ($log =~ /\.Z$/ || $log =~ /\.gz$/ || $log =~ /\.bz2/);
+}
+
+if ($someZ == 0)
+{
+	# if none are compressed then a single cat command will suffice
+	system "cat @sorted\n";
+}
+else
+{
+	# use a separate uncompress or cat command for each file
+	foreach $log (@sorted)
+	{
+		if ($log =~ /\.Z/)
+		{
+			# the uncompress command is not always installed
+			# but gzip works just as well on .Z files
+			system "gzip -d -c \"$log\"";
+		}
+		elsif ($log =~ /\.gz/)
+		{
+			system "gzip -d -c \"$log\"";
+		}
+		elsif ($log =~ /\.bz2/)
+		{
+			system "bzip2 -d -c \"$log\"";
+		}
+		else
+		{
+			system "cat \"$log\"";
+		}
+	}
+}
+
