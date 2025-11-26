@@ -1,0 +1,30 @@
+//------------------------------------------------
+//--- 010 Editor v9.0 Binary Template
+//
+//      File: Diff.bt
+//   Authors: Andrew Brooks
+//   Version: 1.0
+//   Purpose: Syntax highlighting for diff files.
+//  Category: Syntax
+// File Mask: *.diff
+//  ID Bytes: 
+//   History: 
+//   1.0   2024-03-19 Andrew Brooks: Initial version.
+//------------------------------------------------
+RequiresVersion( 9 );
+
+// To save memory, allow a single copy of this template to provide 
+//  syntax highlighting for all open files that match the file mask.
+HighlightAllowInstanceSharing( true );
+
+local int minusStyle    = HighlightFindStyle( "diff-old", 0x000000, 0xE9EBFF, 0x000000, 0xE9EBFF);
+local int plusStyle     = HighlightFindStyle( "diff-new", 0x000000, 0xECFFE6, 0x000000, 0xECFFE6);
+local int nameStyle     = HighlightFindStyle( "diff-name", 0x000000, 0xFFF4DD, 0x000000, 0xFFF4DD);
+
+void HighlightLineRealtime( int64 line, wchar_t text[], int foreColors[], int backColors[], int count, ushort &flags )
+{
+    int pos;
+    HighlightCheckSingleLineRule(text, count, "^diff ", "$", pos, foreColors, backColors, nameStyle, HIGHLIGHT_REGEX);
+    HighlightCheckSingleLineRule(text, count, "^\\+", "$", pos, foreColors, backColors, plusStyle, HIGHLIGHT_REGEX);
+    HighlightCheckSingleLineRule(text, count, "^-", "$", pos, foreColors, backColors, minusStyle, HIGHLIGHT_REGEX);
+}

@@ -1,0 +1,71 @@
+//------------------------------------------------
+//--- 010 Editor v16.0.2 Binary Template
+//
+//      File: VCDU
+//   Authors: 
+//   Version: 
+//   Purpose: 
+//  Category: 
+// File Mask: 
+//  ID Bytes: 
+//   History: 
+//------------------------------------------------
+LittleEndian();
+BitfieldLeftToRight();
+BitfieldDisablePadding();
+
+struct CADU
+{
+    uint32 sync;
+    int version : 2;
+    int scid : 8;
+    int vcid : 6;
+    int VCDUcount : 24;
+    int replay : 1;
+    int countusage : 1;
+    int reserved2 : 2;
+    int VCDUcountcycle : 4;
+    int reserved5 : 5;
+    int pointer : 11;
+    int data[884];
+    int RS[128];
+};
+
+struct VCDU
+{
+    // EVCDU header
+    //har hdr[20];
+    // bytes 0..1
+    int version : 2;
+    int scid : 8;
+    int vcid : 6;
+    // bytes 2..4
+    int VCDUcount : 24;
+    // bytes 5
+    int replay : 1;
+    int countusage : 1;
+    int reserved2 : 2;
+    int VCDUcountcycle : 4;
+    // bytes 6..7
+    int reserved5 : 5;
+    int pointer : 11;
+    // bytes 8..
+    char data[884];
+    //int RS[128];
+};
+
+struct CCSDS
+{
+    int version : 3;
+    int packettype : 1;
+    int sechdr : 1;
+    int apid : 11;
+    int seq : 2;
+    int count : 14;
+    int length : 16;
+    char data[length];
+};
+
+//CCSDS file[16] <optimize=false>;
+VCDU file[16] <optimize=true>;
+//VCDU two;
