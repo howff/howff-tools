@@ -2,6 +2,7 @@
 # Check that the number of consumers running for each queue is as expected
 # i.e. that the processes are running to handle messages in the queue.
 
+import os
 import requests
 from urllib.parse import quote
 import sys
@@ -47,6 +48,7 @@ def rabbit_query(host, username, password, vhost, queue):
 
 
 if __name__ == "__main__":
+    os.environ['http_proxy']=''
     for queue,expected,process in queues:
         data = rabbit_query(RABBITMQ_HOST, USERNAME, PASSWORD, VHOST, queue)
         consumers = data.get('consumers', 0)
