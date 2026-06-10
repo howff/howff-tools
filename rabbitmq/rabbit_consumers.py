@@ -22,6 +22,8 @@ queues = [
     ("RequestInfoQueue",          1, "CohortPackager"),
     ("ExtractFileIdentQueue", 0, "xxx"),
     ("FileCollectionInfoQueue", 1, "xxx"),
+    ("DLQueue", 0, "xxx"),
+    ("FatalLoggingQueue", 0, "xxx"),
 ]
 
 def rabbit_query(host, username, password, vhost, queue):
